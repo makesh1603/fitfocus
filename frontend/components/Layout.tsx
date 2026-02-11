@@ -35,40 +35,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     ...(user?.role === 'admin' ? [{ path: '/admin', label: 'Admin', icon: ShieldCheck }] : []),
   ];
 
-  const handleGmailSignIn = (overrideEmail?: string) => {
+  const handleGmailSignIn = () => {
     setIsLoggingIn(true);
-    setTimeout(() => {
-      let signInEmail = overrideEmail || email;
-
-      // If no email entered, simulate Google Account Chooser with a prompt
-      if (!signInEmail) {
-        const promptEmail = window.prompt("Simulating Google Sign-In\n\nPlease enter the Gmail address you want to use:", "user@gmail.com");
-        if (!promptEmail) {
-          setIsLoggingIn(false);
-          return;
-        }
-        signInEmail = promptEmail;
-      }
-
-      // Create user from the dynamic email
-      const namePart = signInEmail.split('@')[0];
-      const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-      const photoUrl = `https://ui-avatars.com/api/?name=${formattedName}&background=4f46e5&color=fff`;
-
-      const newUser = {
-        name: formattedName,
-        email: signInEmail,
-        photoUrl: photoUrl
-      };
-
-      login(newUser);
-
-      setIsLoggingIn(false);
-      setShowLoginModal(false);
-      // Reset form
-      setEmail('');
-      setPassword('');
-    }, 1500);
+    window.location.href = "http://localhost:5000/auth/google";
   };
 
   const handleEmailSignIn = (overrideEmail?: string, overridePassword?: string) => {

@@ -14,13 +14,18 @@ const Trainers: React.FC = () => {
     const [trainers, setTrainers] = useState<Trainer[]>([]);
 
     React.useEffect(() => {
-        const savedTrainers = JSON.parse(localStorage.getItem('fitfocus_trainers') || '[]');
-        if (savedTrainers.length > 0) {
-            setTrainers(savedTrainers);
-        } else {
-            setTrainers(MOCK_TRAINERS);
-            localStorage.setItem('fitfocus_trainers', JSON.stringify(MOCK_TRAINERS));
-        }
+        const fetchTrainers = async () => {
+            try {
+                const res = await fetch('/api/trainers');
+                const result = await res.json();
+                if (result.data) {
+                    setTrainers(result.data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch trainers", error);
+            }
+        };
+        fetchTrainers();
     }, []);
 
     const filteredTrainers = trainers.filter(trainer => {
@@ -30,38 +35,38 @@ const Trainers: React.FC = () => {
         return matchesSearch && matchesSpecialty;
     });
 
-    const handleBook = (trainer: Trainer) => {
-        const user = JSON.parse(localStorage.getItem('fitfocus_user') || 'null');
-        const email = user?.email || 'default';
-        const storageKey = `fitfocus_bookings_${email}`;
-
-        const savedBookings = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        if (savedBookings.some((b: any) => b.trainerId === trainer.id)) {
-            alert(`${trainer.name} is already in your bookings!`);
+    const handleBook = async (trainer: Trainer) => {
+        if (!user) {
+            alert('Please sign in to book a session');
             return;
         }
+
         const isConfirmed = window.confirm(`Do you want to reserve a spot with ${trainer.name}?`);
         if (isConfirmed) {
-            const newBooking = {
-                id: Math.random().toString(36).substr(2, 9),
-                trainerId: trainer.id,
-                trainerName: trainer.name,
-                userEmail: email,
-                type: trainer.specialties[0],
-                time: 'Upcoming Session',
-                date: new Date().toLocaleDateString(),
-                img: trainer.imageUrl,
-                status: 'pending'
-            };
+            try {
+                const res = await fetch('/api/bookings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        trainerId: trainer.id,
+                        trainerName: trainer.name,
+                        userEmail: user.email,
+                        type: trainer.specialties[0],
+                        date: new Date().toLocaleDateString(),
+                        time: 'Upcoming Session',
+                        img: trainer.imageUrl
+                    })
+                });
 
-            // Save to user's bookings
-            localStorage.setItem(storageKey, JSON.stringify([...savedBookings, newBooking]));
-
-            // Save to global admin bookings for tracking
-            const allBookings = JSON.parse(localStorage.getItem('fitfocus_all_bookings') || '[]');
-            localStorage.setItem('fitfocus_all_bookings', JSON.stringify([...allBookings, newBooking]));
-
-            alert(`Successfully joined ${trainer.name}'s monthly program! Check your dashboard for status.`);
+                if (res.ok) {
+                    alert(`Successfully joined ${trainer.name}'s monthly program! Check your dashboard for status.`);
+                } else {
+                    alert('Booking failed. Please try again.');
+                }
+            } catch (error) {
+                console.error("Booking failed", error);
+                alert('An error occurred during booking.');
+            }
         }
     };
 

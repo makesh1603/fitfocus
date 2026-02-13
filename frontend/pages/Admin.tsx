@@ -25,75 +25,90 @@ const Admin: React.FC = () => {
     const [editingTrainerId, setEditingTrainerId] = useState<string | null>(null);
 
     useEffect(() => {
-        const allBookings = JSON.parse(localStorage.getItem('fitfocus_all_bookings') || '[]');
-        setBookings(allBookings);
+        const fetchData = async () => {
+            try {
+                const trainersRes = await fetch('/api/trainers');
+                const trainersData = await trainersRes.json();
+                if (trainersData.data) setTrainers(trainersData.data);
 
-        const savedTrainers = JSON.parse(localStorage.getItem('fitfocus_trainers') || '[]');
-        if (savedTrainers.length > 0) {
-            setTrainers(savedTrainers);
-        } else {
-            setTrainers(MOCK_TRAINERS);
-            localStorage.setItem('fitfocus_trainers', JSON.stringify(MOCK_TRAINERS));
-        }
+                const bookingsRes = await fetch('/api/bookings');
+                const bookingsData = await bookingsRes.json();
+                if (bookingsData.data) setBookings(bookingsData.data);
+            } catch (error) {
+                console.error("Failed to fetch admin data", error);
+            }
+        };
+        fetchData();
     }, []);
 
-    const handleAction = (bookingId: string, newStatus: 'confirmed' | 'completed', userEmail: string) => {
-        const updatedAll = bookings.map(b =>
-            b.id === bookingId ? { ...b, status: newStatus } : b
-        );
-        localStorage.setItem('fitfocus_all_bookings', JSON.stringify(updatedAll));
-        setBookings(updatedAll);
+    const handleAction = async (bookingId: string, newStatus: 'confirmed' | 'completed') => {
+        try {
+            const res = await fetch(`/api/bookings/${bookingId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
 
-        const userBookingsKey = `fitfocus_bookings_${userEmail}`;
-        const userBookings = JSON.parse(localStorage.getItem(userBookingsKey) || '[]');
-        const updatedUserBookings = userBookings.map((b: any) =>
-            b.id === bookingId ? { ...b, status: newStatus } : b
-        );
-        localStorage.setItem(userBookingsKey, JSON.stringify(updatedUserBookings));
+            if (res.ok) {
+                const result = await res.json();
+                setBookings(bookings.map(b => b.id === bookingId || b._id === bookingId ? result.data : b));
+            }
+        } catch (error) {
+            console.error("Action failed", error);
+        }
     };
 
-    const handleRemoveBooking = (bookingId: string, userEmail: string) => {
+    const handleRemoveBooking = async (bookingId: string) => {
         if (!window.confirm('Are you sure you want to remove this booking?')) return;
-        const updatedAll = bookings.filter(b => b.id !== bookingId);
-        localStorage.setItem('fitfocus_all_bookings', JSON.stringify(updatedAll));
-        setBookings(updatedAll);
+        try {
+            const res = await fetch(`/api/bookings/${bookingId}`, {
+                method: 'DELETE'
+            });
 
-        const userBookingsKey = `fitfocus_bookings_${userEmail}`;
-        const userBookings = JSON.parse(localStorage.getItem(userBookingsKey) || '[]');
-        const updatedUserBookings = userBookings.filter((b: any) => b.id !== bookingId);
-        localStorage.setItem(userBookingsKey, JSON.stringify(updatedUserBookings));
+            if (res.ok) {
+                setBookings(bookings.filter(b => b.id !== bookingId && b._id !== bookingId));
+            }
+        } catch (error) {
+            console.error("Remove booking failed", error);
+        }
     };
 
-    const handleAddTrainer = (e: React.FormEvent) => {
+    const handleAddTrainer = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        let updatedTrainers;
-        if (editingTrainerId) {
-            updatedTrainers = trainers.map(t =>
-                t.id === editingTrainerId ? { ...t, ...newTrainer as Trainer } : t
-            );
-        } else {
-            const trainerToAdd: Trainer = {
-                ...newTrainer as Trainer,
-                id: Math.random().toString(36).substr(2, 9),
-            };
-            updatedTrainers = [...trainers, trainerToAdd];
-        }
+        try {
+            const method = editingTrainerId ? 'PUT' : 'POST';
+            const url = editingTrainerId ? `/api/trainers/${editingTrainerId}` : '/api/trainers';
 
-        setTrainers(updatedTrainers);
-        localStorage.setItem('fitfocus_trainers', JSON.stringify(updatedTrainers));
-        setShowAddForm(false);
-        setEditingTrainerId(null);
-        setNewTrainer({
-            name: '',
-            specialties: [],
-            rating: 5.0,
-            pricePerHour: 0,
-            bio: '',
-            imageUrl: '',
-            experienceYears: 0,
-            availability: ['Mon', 'Wed', 'Fri']
-        });
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newTrainer)
+            });
+
+            if (res.ok) {
+                const result = await res.json();
+                if (editingTrainerId) {
+                    setTrainers(trainers.map(t => t.id === editingTrainerId ? result.data : t));
+                } else {
+                    setTrainers([...trainers, result.data]);
+                }
+                setShowAddForm(false);
+                setEditingTrainerId(null);
+                setNewTrainer({
+                    name: '',
+                    specialties: [],
+                    rating: 5.0,
+                    pricePerHour: 0,
+                    bio: '',
+                    imageUrl: '',
+                    experienceYears: 0,
+                    availability: ['Mon', 'Wed', 'Fri']
+                });
+            }
+        } catch (error) {
+            console.error("Trainer save failed", error);
+        }
     };
 
     const handleEditTrainer = (trainer: Trainer) => {
@@ -118,11 +133,19 @@ const Admin: React.FC = () => {
         });
     };
 
-    const handleRemoveTrainer = (id: string) => {
+    const handleRemoveTrainer = async (id: string) => {
         if (!window.confirm('Are you sure you want to remove this trainer?')) return;
-        const updatedTrainers = trainers.filter(t => t.id !== id);
-        setTrainers(updatedTrainers);
-        localStorage.setItem('fitfocus_trainers', JSON.stringify(updatedTrainers));
+        try {
+            const res = await fetch(`/api/trainers/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (res.ok) {
+                setTrainers(trainers.filter(t => t.id !== id && t._id !== id));
+            }
+        } catch (error) {
+            console.error("Remove trainer failed", error);
+        }
     };
 
     const toggleSpecialty = (specialty: string) => {
@@ -302,7 +325,7 @@ const Admin: React.FC = () => {
                                     </div>
                                     <div className="flex items-center gap-6 mt-4">
                                         <div className="text-center">
-                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Price / Month</p>
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Price / Hour</p>
                                             <p className="font-black text-slate-900 leading-none mt-1">₹{trainer.pricePerHour}</p>
                                         </div>
                                         <div className="text-center border-l border-slate-100 pl-6">
@@ -371,24 +394,22 @@ const Admin: React.FC = () => {
                                                 </span>
                                             </td>
                                             <td className="px-8 py-6 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    {booking.status === 'pending' && (
-                                                        <button
-                                                            onClick={() => handleAction(booking.id, 'confirmed', booking.userEmail)}
-                                                            className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
-                                                            title="Confirm Booking"
-                                                        >
-                                                            <Check className="w-4 h-4" />
-                                                        </button>
-                                                    )}
+                                                {booking.status === 'pending' && (
                                                     <button
-                                                        onClick={() => handleRemoveBooking(booking.id, booking.userEmail)}
-                                                        className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
-                                                        title="Cancel/Remove"
+                                                        onClick={() => handleAction(booking.id || booking._id, 'confirmed')}
+                                                        className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
+                                                        title="Confirm Booking"
                                                     >
-                                                        <X className="w-4 h-4" />
+                                                        <Check className="w-4 h-4" />
                                                     </button>
-                                                </div>
+                                                )}
+                                                <button
+                                                    onClick={() => handleRemoveBooking(booking.id || booking._id)}
+                                                    className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
+                                                    title="Cancel/Remove"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))

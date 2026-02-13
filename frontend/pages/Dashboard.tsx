@@ -19,41 +19,55 @@ const Dashboard: React.FC = () => {
   const [hostTab, setHostTab] = React.useState<'pending' | 'confirmed'>('pending');
 
   React.useEffect(() => {
-    const email = user?.email || 'default';
+    const fetchData = async () => {
+      if (!user) return;
 
-    if (user?.role === 'customer') {
-      // Bookings
-      const savedBookings = JSON.parse(localStorage.getItem(`fitfocus_bookings_${email}`) || '[]');
-      setBookings(savedBookings);
+      const email = user.email;
 
-      // Biometrics
-      const savedBiometrics = JSON.parse(localStorage.getItem(`fitfocus_biometrics_${email}`) || '[]');
-      setProgressData(savedBiometrics);
+      if (user.role === 'customer') {
+        try {
+          const res = await fetch(`/api/bookings/user/${email}`);
+          const result = await res.json();
+          if (result.data) setBookings(result.data);
+        } catch (error) {
+          console.error("Failed to fetch user bookings", error);
+        }
 
-      // Workouts
-      const savedWorkouts = JSON.parse(localStorage.getItem(`fitfocus_workouts_${email}`) || '[]');
-      setWorkouts(savedWorkouts);
-    } else if (user?.role === 'host') {
-      const savedAll = JSON.parse(localStorage.getItem('fitfocus_all_bookings') || '[]');
-      setAllBookings(savedAll);
-    }
+        // Biometrics (keeping in localStorage for now as no DB model exists yet)
+        const savedBiometrics = JSON.parse(localStorage.getItem(`fitfocus_biometrics_${email}`) || '[]');
+        setProgressData(savedBiometrics);
+
+        // Workouts (keeping in localStorage for now)
+        const savedWorkouts = JSON.parse(localStorage.getItem(`fitfocus_workouts_${email}`) || '[]');
+        setWorkouts(savedWorkouts);
+      } else if (user.role === 'host') {
+        try {
+          const res = await fetch('/api/bookings');
+          const result = await res.json();
+          if (result.data) setAllBookings(result.data);
+        } catch (error) {
+          console.error("Failed to fetch all bookings", error);
+        }
+      }
+    };
+    fetchData();
   }, [user]);
 
-  const handleAction = (bookingId: string, newStatus: 'confirmed' | 'completed', userEmail: string) => {
-    // Update global bookings
-    const updatedAll = allBookings.map(b =>
-      b.id === bookingId ? { ...b, status: newStatus } : b
-    );
-    localStorage.setItem('fitfocus_all_bookings', JSON.stringify(updatedAll));
-    setAllBookings(updatedAll);
+  const handleAction = async (bookingId: string, newStatus: 'confirmed' | 'completed') => {
+    try {
+      const res = await fetch(`/api/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
 
-    // Update user-specific bookings
-    const userBookingsKey = `fitfocus_bookings_${userEmail}`;
-    const userBookings = JSON.parse(localStorage.getItem(userBookingsKey) || '[]');
-    const updatedUserBookings = userBookings.map((b: any) =>
-      b.id === bookingId ? { ...b, status: newStatus } : b
-    );
-    localStorage.setItem(userBookingsKey, JSON.stringify(updatedUserBookings));
+      if (res.ok) {
+        const result = await res.json();
+        setAllBookings(allBookings.map(b => b.id === bookingId || b._id === bookingId ? result.data : b));
+      }
+    } catch (error) {
+      console.error("Action failed", error);
+    }
   };
 
   const handleQuickLog = (e: React.FormEvent) => {
@@ -65,15 +79,23 @@ const Dashboard: React.FC = () => {
     return (totalMinutes / 60).toFixed(1);
   };
 
-  const handleRemoveBooking = (indexToRemove: number) => {
+  const handleRemoveBooking = async (bookingId: string) => {
     if (window.confirm('Are you sure you want to cancel this booking?')) {
-      const email = user?.email || 'default';
-      const updatedBookings = bookings.filter((_, idx) => idx !== indexToRemove);
-      setBookings(updatedBookings);
-      localStorage.setItem(`fitfocus_bookings_${email}`, JSON.stringify(updatedBookings));
+      try {
+        const res = await fetch(`/api/bookings/${bookingId}`, {
+          method: 'DELETE'
+        });
 
-      // Also remove from global if needed, but usually host/admin manages that.
-      // For now, let's just keep it simple.
+        if (res.ok) {
+          if (user?.role === 'customer') {
+            setBookings(bookings.filter(b => b.id !== bookingId && b._id !== bookingId));
+          } else {
+            setAllBookings(allBookings.filter(b => b.id !== bookingId && b._id !== bookingId));
+          }
+        }
+      } catch (error) {
+        console.error("Remove booking failed", error);
+      }
     }
   };
 
@@ -153,20 +175,14 @@ const Dashboard: React.FC = () => {
                           {booking.status === 'pending' ? (
                             <>
                               <button
-                                onClick={() => handleAction(booking.id, 'confirmed', booking.userEmail)}
+                                onClick={() => handleAction(booking.id || booking._id, 'confirmed')}
                                 className="p-2 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-600 hover:text-white transition-all shadow-sm"
                                 title="Approve Reservation"
                               >
                                 <Check className="w-4 h-4" />
                               </button>
                               <button
-                                onClick={() => {
-                                  if (window.confirm('Reject this reservation?')) {
-                                    const updated = allBookings.filter(b => b.id !== booking.id);
-                                    localStorage.setItem('fitfocus_all_bookings', JSON.stringify(updated));
-                                    setAllBookings(updated);
-                                  }
-                                }}
+                                onClick={() => handleRemoveBooking(booking.id || booking._id)}
                                 className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all shadow-sm"
                                 title="Reject"
                               >

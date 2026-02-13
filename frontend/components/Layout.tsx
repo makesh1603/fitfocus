@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Dumbbell, Calendar, User, Search, Sparkles, X, LogOut, BookOpen, ChevronRight, ShieldCheck } from 'lucide-react';
+import { Dumbbell, Calendar, User, Search, Sparkles, X, LogOut, BookOpen, ChevronRight, ShieldCheck, Download } from 'lucide-react';
 import { User as AuthUser } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useEffect } from 'react';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
@@ -13,6 +14,38 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginView, setLoginView] = useState<'chooser' | 'form'>('chooser');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // PWA Install Logic
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    window.addEventListener('appinstalled', () => {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    });
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const isAdmin = user?.email === 'admin@fitfocus.ai';
 
@@ -35,40 +68,31 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     ...(user?.role === 'admin' ? [{ path: '/admin', label: 'Admin', icon: ShieldCheck }] : []),
   ];
 
-  const handleGmailSignIn = () => {
+  const handleGmailSignIn = (email?: string) => {
     setIsLoggingIn(true);
-    window.location.href = "http://localhost:5000/auth/google";
+    window.location.href = "/auth/google";
   };
 
-  const handleEmailSignIn = (overrideEmail?: string, overridePassword?: string) => {
+  const handleEmailSignIn = async (overrideEmail?: string, overridePassword?: string) => {
     const finalEmail = overrideEmail || email;
     const finalPassword = overridePassword || password;
 
     if (!finalEmail || !finalPassword) return;
 
     setIsLoggingIn(true);
-    // Simulate API call
-    setTimeout(() => {
-      // Create a mock user from the email address
-      const namePart = finalEmail.split('@')[0];
-      // Capitalize first letter of name
-      const formattedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
-      const photoUrl = `https://ui-avatars.com/api/?name=${formattedName}&background=0f172a&color=fff`;
 
-      const newUser = {
-        name: formattedName,
-        email: finalEmail,
-        photoUrl: photoUrl,
-      };
+    // Call the new async login which talks to the backend
+    await login({
+      email: finalEmail,
+      name: finalEmail.split('@')[0],
+      photoUrl: ''
+    }, finalPassword);
 
-      login(newUser, finalPassword);
-
-      setIsLoggingIn(false);
-      setShowLoginModal(false);
-      // Reset form
-      setEmail('');
-      setPassword('');
-    }, 1500);
+    setIsLoggingIn(false);
+    setShowLoginModal(false);
+    // Reset form
+    setEmail('');
+    setPassword('');
   };
 
   const handleLogout = () => {
@@ -108,6 +132,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </nav>
 
           <div className="flex items-center gap-4">
+            {isInstallable && (
+              <button
+                onClick={handleInstallClick}
+                className="hidden lg:flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 rounded-full text-sm font-bold hover:bg-emerald-600 hover:text-white transition-all animate-bounce-subtle"
+              >
+                <Download className="w-4 h-4" />
+                Install App
+              </button>
+            )}
             {user ? (
               <div className="flex items-center gap-3 bg-slate-50 pl-3 pr-1 py-1 rounded-full border border-slate-200">
                 <span className="text-xs font-bold text-slate-700 hidden lg:block">{user.name}</span>
@@ -273,6 +306,15 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </Link>
           );
         })}
+        {isInstallable && (
+          <button
+            onClick={handleInstallClick}
+            className="flex flex-col items-center gap-1 text-emerald-600 animate-bounce-subtle"
+          >
+            <Download className="w-5 h-5" />
+            <span className="text-[10px] font-bold uppercase tracking-tight">Install</span>
+          </button>
+        )}
       </nav>
 
       <div className="h-20 lg:hidden"></div>

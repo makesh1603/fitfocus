@@ -10,6 +10,20 @@ const AICoach: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [aiResponse, setAiResponse] = useState<string>('');
   const [workoutPlan, setWorkoutPlan] = useState<WorkoutPlan | null>(null);
+  const [trainers, setTrainers] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    const fetchTrainers = async () => {
+      try {
+        const res = await fetch('/api/trainers');
+        const result = await res.json();
+        if (result.data) setTrainers(result.data);
+      } catch (error) {
+        console.error("Failed to fetch trainers for AI Coach", error);
+      }
+    };
+    fetchTrainers();
+  }, []);
 
   const [profile, setProfile] = useState<UserProfile>({
     name: '',
@@ -48,7 +62,7 @@ const AICoach: React.FC = () => {
 
     try {
       const [rec, plan] = await Promise.all([
-        getAIRecommendation(profile, MOCK_TRAINERS),
+        getAIRecommendation(profile, trainers),
         generateWorkoutPlan(profile, "Bodyweight, Dumbbells")
       ]);
       setAiResponse(rec);

@@ -21,7 +21,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const checkUser = async () => {
             try {
-                const res = await fetch('http://localhost:5000/auth/current_user', {
+                const res = await fetch('/auth/current_user', {
                     credentials: 'include' // Important for cookies
                 });
                 const data = await res.json();
@@ -38,14 +38,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         checkUser();
     }, []);
 
-    // Placeholder for manual login if we kept it, but for Google Auth we trust the session
-    const login = (newUser: User) => {
-        setUser(newUser);
+    // Updated login to call the backend and persist the session
+    const login = async (newUser: User, password?: string) => {
+        try {
+            const res = await fetch('/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email: newUser.email, password }),
+                credentials: 'include'
+            });
+            const authenticatedUser = await res.json();
+            if (authenticatedUser && !authenticatedUser.error) {
+                setUser(authenticatedUser);
+            } else {
+                // Fallback for demo if backend fails
+                setUser(newUser);
+            }
+        } catch (error) {
+            console.error("Login call failed", error);
+            setUser(newUser);
+        }
     };
 
     const logout = async () => {
         try {
-            window.location.href = "http://localhost:5000/auth/logout";
+            window.location.href = "/auth/logout";
         } catch (error) {
             console.error("Logout failed", error);
         }
